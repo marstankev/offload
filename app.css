@@ -241,7 +241,12 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  border-radius: 14px;
+  transition: transform .28s cubic-bezier(.25, .8, .3, 1), opacity .3s ease;
+  touch-action: pan-y;
 }
+.arow.no-tr { transition: none; }
+.arow.leave { animation: bd-exhale .55s ease forwards; }
 .arow .body { flex: 1; min-width: 0; }
 .crumb {
   font-size: 12px;
@@ -326,8 +331,9 @@ body {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: var(--kb, 0px);
   padding: 10px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+  transition: bottom .2s ease-out;
   background: var(--bar);
   backdrop-filter: blur(18px) saturate(180%);
   -webkit-backdrop-filter: blur(18px) saturate(180%);
@@ -352,6 +358,12 @@ body {
 }
 #newTask::placeholder { color: rgba(120, 120, 128, .55); }
 
+/* Keyboard open: the bar rides above the keyboard (no safe-area needed there),
+   the pill follows it, and the list gains scroll room so nothing hides. */
+#app.kb-open .input-bar { padding-bottom: 12px; }
+#app.kb-open .undo-pill { bottom: calc(var(--kb, 0px) + 86px); }
+#app.kb-open .screen { padding-bottom: calc(104px + var(--kb, 0px)); }
+
 /* ── Animations ── */
 @keyframes bd-exhale {
   to { opacity: 0; letter-spacing: .14em; filter: blur(5px); transform: translateY(-4px); }
@@ -369,10 +381,13 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .track { transition: none; }
+  .input-bar { transition: none; }
   .rw { transition: none; }
   .row { transition: background-color .15s ease; }
   .row.leave { animation: none; opacity: 0; }
   .row.shake { animation: none; }
+  .arow { transition: none; }
+  .arow.leave { animation: none; opacity: 0; }
   .chev svg { transition: none; }
   .undo-pill { animation: none; }
 }

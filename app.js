@@ -26,14 +26,17 @@
   let cancelEdit = false;
   let collapsed = new Set();   // parent ids collapsed (session only)
   let leavePhase = new Map();  // id -> 1 (animating) | 2 (collapsing)
-  let undoInfo = null;         // {group, label}
+  let undoInfo = null;         // {type:'complete', group, label} | {type:'delete', nodes, label}
   let refuseId = null;
   let drag = null;             // {id, sx, sy, target: {id, mode, invalid} | null}
   let swipe = null;            // {id, dx}
   let ptr = null;              // {id, x, y, moved, t, el, pid}
+  let archSwipe = null;        // {id, dx}
+  let ptrA = null;             // archive pointer state
   let lpTimer = 0, undoTimer = 0, refuseTimer = 0, persistTimer = 0;
   let persistDirty = false;
-  const rowEls = new Map();    // id -> {wrap, row}
+  const rowEls = new Map();    // id -> {wrap, row} (list)
+  const archEls = new Map();   // id -> {wrap, row} (archive)
 
   // ── Persistence ──
   function load() {
@@ -155,15 +158,56 @@
     mark.forEach(i => leavePhase.delete(i));
     persist();
     clearTimeout(undoTimer);
-    undoInfo = { group, label: '“' + label + '” done' };
+    undoInfo = { type: 'complete', group, label: '“' + label + '” done' };
+    undoTimer = setTimeout(() => { undoInfo = null; render(); }, UNDO_MS);
+    render();
+  }
+
+  // Permanent delete of an archived node and its (archived) descendants.
+  // Recoverable only via the undo pill; once it expires the nodes are gone.
+  function deleteArchived(id) {
+    const mark = new Set([id]);
+    nodes.forEach(n => { if (isDescOf(n.id, id)) mark.add(n.id); });
+    mark.forEach(i => {
+      leavePhase.set(i, 1);
+      const els = archEls.get(i);
+      if (els) els.row.classList.add('leave');
+    });
+    archSwipe = null;
+    setTimeout(() => {
+      mark.forEach(i => {
+        if (leavePhase.get(i) === 1) {
+          leavePhase.set(i, 2);
+          const els = archEls.get(i);
+          if (els) els.wrap.classList.add('gone');
+        }
+      });
+    }, LEAVE_COLLAPSE_MS());
+    setTimeout(() => commitDelete(mark), LEAVE_COMMIT_MS());
+  }
+
+  function commitDelete(mark) {
+    const n = byId([...mark][0]);
+    let label = n ? n.text : '';
+    if (label.length > 24) label = label.slice(0, 23) + '…';
+    const deleted = nodes.filter(x => mark.has(x.id));
+    nodes = nodes.filter(x => !mark.has(x.id));
+    mark.forEach(i => leavePhase.delete(i));
+    persist();
+    clearTimeout(undoTimer);
+    undoInfo = { type: 'delete', nodes: deleted, label: '“' + label + '” deleted' };
     undoTimer = setTimeout(() => { undoInfo = null; render(); }, UNDO_MS);
     render();
   }
 
   function undo() {
     if (!undoInfo) return;
-    const g = undoInfo.group;
-    nodes = nodes.map(n => n.completedGroup === g ? { ...n, completedAt: null, completedGroup: null } : n);
+    if (undoInfo.type === 'delete') {
+      nodes = [...undoInfo.nodes, ...nodes];
+    } else {
+      const g = undoInfo.group;
+      nodes = nodes.map(n => n.completedGroup === g ? { ...n, completedAt: null, completedGroup: null } : n);
+    }
     undoInfo = null;
     clearTimeout(undoTimer);
     persist();
@@ -172,7 +216,7 @@
 
   function restore(id) {
     const n = byId(id);
-    if (!n) return;
+    if (!n || leavePhase.has(id)) return;
     const revive = new Set([id]);
     let p = n.parentId;
     while (p) {
@@ -371,6 +415,55 @@
     if (drag || swipe) { drag = null; swipe = null; render(); }
   }
 
+  // Archive swipe: same thresholds as the list, but the only outcome is
+  // permanent deletion (with the undo pill as the single recovery path).
+  function onArchPointerDown(e) {
+    if (e.target.closest('[data-ng]')) return;
+    const row = e.target.closest('.arow');
+    if (!row) return;
+    const id = row.dataset.id;
+    if (leavePhase.has(id)) return;
+    ptrA = { id, x: e.clientX, y: e.clientY, el: row, pid: e.pointerId };
+  }
+  function onArchPointerMove(e) {
+    if (!ptrA) return;
+    const dx = e.clientX - ptrA.x, dy = e.clientY - ptrA.y;
+    if (!archSwipe) {
+      const nearEdge = ptrA.x < EDGE_GUARD_PX || ptrA.x > window.innerWidth - EDGE_GUARD_PX;
+      if (!nearEdge && Math.abs(dx) > SWIPE_START_PX && Math.abs(dx) > Math.abs(dy) * SWIPE_ANGLE_RATIO) {
+        try { ptrA.el.setPointerCapture(ptrA.pid); } catch (err) {}
+        archSwipe = { id: ptrA.id, dx };
+        ptrA.el.classList.add('no-tr');
+      }
+    }
+    if (archSwipe) {
+      archSwipe.dx = dx;
+      ptrA.el.style.transform = 'translateX(' + dx + 'px)';
+    }
+  }
+  function onArchPointerUp() {
+    if (archSwipe && ptrA && archSwipe.id === ptrA.id) {
+      const el = ptrA.el;
+      if (Math.abs(archSwipe.dx) > SWIPE_COMMIT_PX) {
+        el.classList.remove('no-tr');
+        deleteArchived(archSwipe.id);
+      } else {
+        archSwipe = null;
+        el.classList.remove('no-tr');
+        el.style.transform = '';
+      }
+    }
+    ptrA = null;
+  }
+  function onArchPointerCancel() {
+    if (archSwipe && ptrA) {
+      ptrA.el.classList.remove('no-tr');
+      ptrA.el.style.transform = '';
+    }
+    archSwipe = null;
+    ptrA = null;
+  }
+
   function beginEdit(id) {
     if (!byId(id)) return;
     editingId = id;
@@ -497,12 +590,15 @@
   }
 
   function renderArch() {
+    archEls.clear();
     archEl.textContent = '';
     const frag = document.createDocumentFragment();
     const done = nodes.filter(n => n.completedAt !== null).sort((a, b) => b.completedAt - a.completedAt);
     done.forEach(n => {
-      const outer = el('div');
+      const wrap = el('div', 'rw');
+      const clip = el('div', 'clip');
       const arow = el('div', 'arow');
+      arow.dataset.id = n.id;
       const body = el('div', 'body');
       const crumb = crumbOf(n);
       if (crumb) body.appendChild(el('div', 'crumb', crumb));
@@ -511,12 +607,20 @@
       arow.appendChild(el('div', 'when', relTime(n.completedAt)));
       const btn = el('button', 'putback', 'Put back');
       btn.type = 'button';
+      btn.dataset.ng = '1';
       btn.dataset.act = 'restore';
       btn.dataset.id = n.id;
       arow.appendChild(btn);
-      outer.appendChild(arow);
-      outer.appendChild(el('div', 'hairline'));
-      frag.appendChild(outer);
+      const ph = leavePhase.get(n.id);
+      if (ph) {
+        arow.classList.add('leave');
+        if (ph === 2) wrap.classList.add('gone');
+      }
+      clip.appendChild(arow);
+      clip.appendChild(el('div', 'hairline'));
+      wrap.appendChild(clip);
+      archEls.set(n.id, { wrap, row: arow });
+      frag.appendChild(wrap);
     });
     archEl.appendChild(frag);
     $('archEmpty').hidden = done.length > 0;
@@ -540,10 +644,16 @@
   listEl.addEventListener('pointercancel', onPointerCancel);
   listEl.addEventListener('contextmenu', e => e.preventDefault());
 
+  archEl.addEventListener('pointerdown', onArchPointerDown);
+  archEl.addEventListener('pointermove', onArchPointerMove);
+  archEl.addEventListener('pointerup', onArchPointerUp);
+  archEl.addEventListener('pointercancel', onArchPointerCancel);
+  archEl.addEventListener('contextmenu', e => e.preventDefault());
+
   // touch-action stays pan-y for normal scrolling; once a swipe or drag owns
   // the gesture, block the browser's scroll/pull-to-refresh outright.
   document.addEventListener('touchmove', e => {
-    if (drag || swipe) e.preventDefault();
+    if (drag || swipe || archSwipe) e.preventDefault();
   }, { passive: false });
 
   document.addEventListener('click', e => {
@@ -565,6 +675,29 @@
     newTask.value = '';
     addTask(text);
   });
+
+  // ── Keyboard: keep the layout still, float only the input bar ──
+  // The keyboard must not resize or pan the app. Android is told to overlay
+  // (interactive-widget=overlays-content); iOS pans the document to reveal the
+  // focused input. We track the keyboard inset via visualViewport, lift the
+  // bar by that amount, and undo any document pan so the list never jumps.
+  const vv = window.visualViewport;
+  if (vv) {
+    let kbRaf = 0;
+    const onViewport = () => {
+      cancelAnimationFrame(kbRaf);
+      kbRaf = requestAnimationFrame(() => {
+        const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+        document.documentElement.style.setProperty('--kb', inset + 'px');
+        document.getElementById('app').classList.toggle('kb-open', inset > 40);
+        if (inset > 0 && (window.scrollY !== 0 || window.scrollX !== 0)) window.scrollTo(0, 0);
+      });
+    };
+    vv.addEventListener('resize', onViewport);
+    vv.addEventListener('scroll', onViewport);
+    window.addEventListener('focusin', () => setTimeout(onViewport, 250));
+    window.addEventListener('focusout', () => setTimeout(onViewport, 250));
+  }
 
   // ── Boot ──
   load();
