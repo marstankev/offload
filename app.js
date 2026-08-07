@@ -676,27 +676,37 @@
     addTask(text);
   });
 
-  // ── Keyboard: keep the layout still, float only the input bar ──
-  // The keyboard must not resize or pan the app. Android is told to overlay
-  // (interactive-widget=overlays-content); iOS pans the document to reveal the
-  // focused input. We track the keyboard inset via visualViewport, lift the
-  // bar by that amount, and undo any document pan so the list never jumps.
+  // ── Keyboard: pin the app to the visual viewport ──
+  // iOS pans the visual viewport to reveal a bottom-anchored input, and that
+  // pan cannot be cancelled from JS. So instead of fighting it, the app is
+  // resized to the visible area (vv.height) and counter-translated by the pan
+  // offset (vv.offsetTop): the header and list hold still on screen and the
+  // input bar lands flush above the keyboard. Android with
+  // interactive-widget=overlays-content produces the same vv geometry.
   const vv = window.visualViewport;
   if (vv) {
+    const appEl = document.getElementById('app');
     let kbRaf = 0;
     const onViewport = () => {
       cancelAnimationFrame(kbRaf);
       kbRaf = requestAnimationFrame(() => {
-        const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-        document.documentElement.style.setProperty('--kb', inset + 'px');
-        document.getElementById('app').classList.toggle('kb-open', inset > 40);
-        if (inset > 0 && (window.scrollY !== 0 || window.scrollX !== 0)) window.scrollTo(0, 0);
+        const shortfall = window.innerHeight - vv.height;
+        if (shortfall > 40) {
+          appEl.style.height = vv.height + 'px';
+          appEl.style.transform = 'translateY(' + vv.offsetTop + 'px)';
+          appEl.classList.add('kb-open');
+        } else {
+          appEl.style.height = '';
+          appEl.style.transform = '';
+          appEl.classList.remove('kb-open');
+        }
+        if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0);
       });
     };
     vv.addEventListener('resize', onViewport);
     vv.addEventListener('scroll', onViewport);
-    window.addEventListener('focusin', () => setTimeout(onViewport, 250));
-    window.addEventListener('focusout', () => setTimeout(onViewport, 250));
+    window.addEventListener('focusin', () => { setTimeout(onViewport, 50); setTimeout(onViewport, 300); });
+    window.addEventListener('focusout', () => { setTimeout(onViewport, 50); setTimeout(onViewport, 300); });
   }
 
   // ── Boot ──

@@ -331,9 +331,8 @@ body {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: var(--kb, 0px);
+  bottom: 0;
   padding: 10px 20px calc(12px + env(safe-area-inset-bottom, 0px));
-  transition: bottom .2s ease-out;
   background: var(--bar);
   backdrop-filter: blur(18px) saturate(180%);
   -webkit-backdrop-filter: blur(18px) saturate(180%);
@@ -358,11 +357,11 @@ body {
 }
 #newTask::placeholder { color: rgba(120, 120, 128, .55); }
 
-/* Keyboard open: the bar rides above the keyboard (no safe-area needed there),
-   the pill follows it, and the list gains scroll room so nothing hides. */
+/* Keyboard open: #app is resized/translated by JS to exactly fill the
+   visible area above the keyboard, so safe-area padding (covered by the
+   keyboard) comes off the bar and the pill hugs it. */
 #app.kb-open .input-bar { padding-bottom: 12px; }
-#app.kb-open .undo-pill { bottom: calc(var(--kb, 0px) + 86px); }
-#app.kb-open .screen { padding-bottom: calc(104px + var(--kb, 0px)); }
+#app.kb-open .undo-pill { bottom: 86px; }
 
 /* ── Animations ── */
 @keyframes bd-exhale {
