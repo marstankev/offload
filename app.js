@@ -4,6 +4,9 @@
 (() => {
   'use strict';
 
+  // Keep in lockstep with the CACHE name in sw.js — bump both every deploy.
+  const APP_VERSION = 'v5';
+
   const STORAGE_KEY = 'offload.v1';
   const MAX_DEPTH = 3;
   const LONG_PRESS_MS = 430;
@@ -676,40 +679,66 @@
     addTask(text);
   });
 
-  // ── Keyboard: pin the app to the visual viewport ──
-  // iOS pans the visual viewport to reveal a bottom-anchored input, and that
-  // pan cannot be cancelled from JS. So instead of fighting it, the app is
-  // resized to the visible area (vv.height) and counter-translated by the pan
-  // offset (vv.offsetTop): the header and list hold still on screen and the
-  // input bar lands flush above the keyboard. Android with
-  // interactive-widget=overlays-content produces the same vv geometry.
+  // ── Keyboard: preempt the iOS pan instead of counteracting it ──
+  // iOS pans the visual viewport when the focused input would be covered by
+  // the keyboard, and that animated pan cannot be matched exactly from JS —
+  // any counter-transform shows a jump or wobble. So the pan is prevented:
+  // the instant an input gains focus, the app shrinks so the input bar is
+  // already above where the keyboard will land. Nothing needs revealing, no
+  // pan happens, and a height change never moves top-anchored content.
+  // Keyboard height is estimated on first use, then measured and cached.
   const vv = window.visualViewport;
   if (vv) {
     const appEl = document.getElementById('app');
+    const coarse = window.matchMedia('(pointer: coarse)').matches;
+    let kbCache = 0;
+    try { kbCache = +(localStorage.getItem('offload.kb') || 0); } catch (e) {}
+    let preempted = false;
     let kbRaf = 0;
+
+    const applyPin = () => {
+      const shortfall = window.innerHeight - vv.height;
+      if (shortfall > 40) {
+        preempted = false;
+        appEl.style.height = vv.height + 'px';
+        appEl.style.transform = vv.offsetTop > 0 ? 'translateY(' + vv.offsetTop + 'px)' : '';
+        appEl.classList.add('kb-open');
+        if (shortfall > 100 && shortfall !== kbCache) {
+          kbCache = shortfall;
+          try { localStorage.setItem('offload.kb', String(shortfall)); } catch (e) {}
+        }
+      } else if (!preempted) {
+        appEl.style.height = '';
+        appEl.style.transform = '';
+        appEl.classList.remove('kb-open');
+      }
+      if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0);
+    };
     const onViewport = () => {
       cancelAnimationFrame(kbRaf);
-      kbRaf = requestAnimationFrame(() => {
-        const shortfall = window.innerHeight - vv.height;
-        if (shortfall > 40) {
-          appEl.style.height = vv.height + 'px';
-          appEl.style.transform = 'translateY(' + vv.offsetTop + 'px)';
-          appEl.classList.add('kb-open');
-        } else {
-          appEl.style.height = '';
-          appEl.style.transform = '';
-          appEl.classList.remove('kb-open');
-        }
-        if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0);
-      });
+      kbRaf = requestAnimationFrame(applyPin);
     };
     vv.addEventListener('resize', onViewport);
     vv.addEventListener('scroll', onViewport);
-    window.addEventListener('focusin', () => { setTimeout(onViewport, 50); setTimeout(onViewport, 300); });
-    window.addEventListener('focusout', () => { setTimeout(onViewport, 50); setTimeout(onViewport, 300); });
+
+    window.addEventListener('focusin', e => {
+      if (!coarse || !e.target.matches('input')) return;
+      if (window.innerHeight - vv.height > 40) return; // keyboard already up
+      preempted = true;
+      appEl.style.height = (window.innerHeight - (kbCache || 300)) + 'px';
+      appEl.classList.add('kb-open');
+      // Hardware keyboard / no resize: revert rather than stay shrunken.
+      setTimeout(() => { if (preempted) { preempted = false; applyPin(); } }, 700);
+    });
+    window.addEventListener('focusout', () => {
+      preempted = false;
+      setTimeout(onViewport, 50);
+      setTimeout(onViewport, 300);
+    });
   }
 
   // ── Boot ──
+  $('ver').textContent = APP_VERSION;
   load();
   render();
 

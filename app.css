@@ -50,11 +50,8 @@ body {
   position: relative;
   overflow: hidden;
   background: var(--bg);
-  /* Keyboard pinning: iOS reports the final viewport pan instantly but
-     animates it over ~250ms. Animating the counter-transform on a matching
-     curve keeps content visually still instead of jumping then sliding.
-     Corrective, not decorative — stays on under reduced motion. */
-  transition: transform .25s cubic-bezier(.36, .66, .04, 1), height .25s cubic-bezier(.36, .66, .04, 1);
+  /* No transition here: the focusin keyboard preempt in app.js must resize
+     the app instantly, before iOS decides whether to pan the viewport. */
 }
 
 /* ── Tabs ── */
@@ -285,6 +282,14 @@ body {
   color: var(--tint);
   font-family: inherit;
   cursor: pointer;
+}
+
+.ver {
+  text-align: center;
+  font-size: 11px;
+  color: var(--ter);
+  padding: 28px 0 8px;
+  user-select: none;
 }
 
 /* ── Empty states ── */
