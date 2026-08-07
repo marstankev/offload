@@ -5,7 +5,7 @@
   'use strict';
 
   // Keep in lockstep with the CACHE name in sw.js — bump both every deploy.
-  const APP_VERSION = 'v6';
+  const APP_VERSION = 'v7';
 
   const STORAGE_KEY = 'offload.v1';
   const MAX_DEPTH = 3;
@@ -38,6 +38,7 @@
   let ptrA = null;             // archive pointer state
   let lpTimer = 0, undoTimer = 0, refuseTimer = 0, persistTimer = 0;
   let persistDirty = false;
+  let preemptShrink = () => {}; // assigned in the keyboard section when visualViewport exists
   const rowEls = new Map();    // id -> {wrap, row} (list)
   const archEls = new Map();   // id -> {wrap, row} (archive)
 
@@ -471,10 +472,11 @@
     if (!byId(id)) return;
     editingId = id;
     cancelEdit = false;
+    preemptShrink();
     render();
     const input = document.getElementById('editInput');
     if (input) {
-      input.focus();
+      input.focus({ preventScroll: true });
       const n = input.value.length;
       try { input.setSelectionRange(n, n); } catch (e) {}
     }
@@ -671,6 +673,15 @@
   $('undoBtn').addEventListener('click', undo);
 
   const newTask = $('newTask');
+  // Native focus fires before any JS can resize, so iOS would pan. Block it,
+  // shrink first (with layout flush inside preemptShrink), then focus
+  // synchronously in the same gesture so the keyboard still opens.
+  newTask.addEventListener('touchstart', e => {
+    if (document.activeElement === newTask) return;
+    e.preventDefault();
+    preemptShrink();
+    newTask.focus({ preventScroll: true });
+  }, { passive: false });
   newTask.addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
     const text = newTask.value.trim();
@@ -681,12 +692,14 @@
 
   // ── Keyboard: preempt the iOS pan instead of counteracting it ──
   // iOS pans the visual viewport when the focused input would be covered by
-  // the keyboard, and that animated pan cannot be matched exactly from JS —
-  // any counter-transform shows a jump or wobble. So the pan is prevented:
-  // the instant an input gains focus, the app shrinks so the input bar is
-  // already above where the keyboard will land. Nothing needs revealing, no
-  // pan happens, and a height change never moves top-anchored content.
-  // Keyboard height is estimated on first use, then measured and cached.
+  // the keyboard, and it snapshots the input's geometry AT FOCUS TIME — a
+  // focusin handler is already too late (proven on-device in v6). So the
+  // shrink must land before focus: callers run preemptShrink() and force a
+  // layout flush, then focus programmatically in the same gesture. The app
+  // is then already short enough that iOS has nothing to reveal: no pan,
+  // and a height change never moves top-anchored content. Keyboard height
+  // starts as a deliberate overestimate (a brief gap is invisible; an
+  // undershoot pans), then is measured and cached.
   const vv = window.visualViewport;
   if (vv) {
     const appEl = document.getElementById('app');
@@ -721,14 +734,19 @@
     vv.addEventListener('resize', onViewport);
     vv.addEventListener('scroll', onViewport);
 
-    window.addEventListener('focusin', e => {
-      if (!coarse || !e.target.matches('input')) return;
+    preemptShrink = () => {
+      if (!coarse || preempted) return;
       if (window.innerHeight - vv.height > 40) return; // keyboard already up
       preempted = true;
-      appEl.style.height = (window.innerHeight - (kbCache || 300)) + 'px';
+      appEl.style.height = (window.innerHeight - (kbCache || 360)) + 'px';
       appEl.classList.add('kb-open');
+      void appEl.offsetHeight; // flush layout before the caller focuses
       // Hardware keyboard / no resize: revert rather than stay shrunken.
       setTimeout(() => { if (preempted) { preempted = false; applyPin(); } }, 700);
+    };
+
+    window.addEventListener('focusin', e => {
+      if (e.target.matches('input')) preemptShrink(); // fallback for untapped focus routes
     });
     window.addEventListener('focusout', () => {
       preempted = false;
