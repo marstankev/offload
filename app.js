@@ -5,7 +5,7 @@
   'use strict';
 
   // Keep in lockstep with the CACHE name in sw.js — bump both every deploy.
-  const APP_VERSION = 'v9';
+  const APP_VERSION = 'v10';
 
   const STORAGE_KEY = 'offload.v1';
   const MAX_DEPTH = 3;
@@ -161,10 +161,24 @@
     nodes = nodes.map(n => mark.has(n.id) ? { ...n, completedAt: now, completedGroup: group } : n);
     mark.forEach(i => leavePhase.delete(i));
     persist();
-    clearTimeout(undoTimer);
-    undoInfo = { type: 'complete', group, label: '“' + label + '” done' };
-    undoTimer = setTimeout(() => { undoInfo = null; render(); }, UNDO_MS);
+    showUndo({ type: 'complete', group, label: '“' + label + '” done' });
     render();
+  }
+
+  // Animate the pill out when its timer expires instead of blinking away.
+  function showUndo(info) {
+    clearTimeout(undoTimer);
+    const pill = $('undoPill');
+    pill.classList.remove('hide');
+    undoInfo = info;
+    undoTimer = setTimeout(() => {
+      pill.classList.add('hide');
+      undoTimer = setTimeout(() => {
+        pill.classList.remove('hide');
+        undoInfo = null;
+        render();
+      }, 220);
+    }, UNDO_MS);
   }
 
   // Permanent delete of an archived node and its (archived) descendants.
@@ -198,9 +212,7 @@
     nodes = nodes.filter(x => !mark.has(x.id));
     mark.forEach(i => leavePhase.delete(i));
     persist();
-    clearTimeout(undoTimer);
-    undoInfo = { type: 'delete', nodes: deleted, label: '“' + label + '” deleted' };
-    undoTimer = setTimeout(() => { undoInfo = null; render(); }, UNDO_MS);
+    showUndo({ type: 'delete', nodes: deleted, label: '“' + label + '” deleted' });
     render();
   }
 
@@ -214,6 +226,7 @@
     }
     undoInfo = null;
     clearTimeout(undoTimer);
+    $('undoPill').classList.remove('hide');
     persist();
     render();
   }
@@ -356,6 +369,56 @@
     render();
   }
 
+  // ── Swipe glyph: ✓ (complete) or ✕ (delete) revealed in the gutter ──
+  // Opacity tracks drag distance, then pops to full once past the commit
+  // threshold so release feels deliberate. Lives behind the row inside .clip.
+  function glyphSvg(kind) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    const path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('d', kind === 'del' ? 'M3.5 3.5l9 9M12.5 3.5l-9 9' : 'M2.5 8.5l3.5 3.5L13.5 4');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    return svg;
+  }
+
+  function updateSwipeGlyph(rowEl, dx, kind) {
+    const clip = rowEl.parentElement;
+    let g = clip.querySelector('.swipe-glyph');
+    if (!g) {
+      g = el('div', 'swipe-glyph' + (kind === 'del' ? ' del' : ''));
+      g.appendChild(glyphSvg(kind));
+      clip.insertBefore(g, clip.firstChild);
+    }
+    if (dx > 0) {
+      // Hug the card's own left edge (which carries the depth indent).
+      g.style.left = ((parseFloat(rowEl.style.marginLeft) || 8) + 14) + 'px';
+      g.style.right = 'auto';
+    } else {
+      g.style.left = 'auto';
+      g.style.right = '22px';
+    }
+    const committed = Math.abs(dx) > SWIPE_COMMIT_PX;
+    g.style.opacity = committed ? '1' : String((Math.abs(dx) / SWIPE_COMMIT_PX) * .4);
+    g.classList.toggle('commit', committed);
+  }
+
+  function fadeSwipeGlyph(rowEl) {
+    const clip = rowEl.parentElement;
+    const g = clip && clip.querySelector('.swipe-glyph');
+    if (!g) return;
+    g.style.opacity = '0';
+    g.classList.remove('commit');
+    setTimeout(() => g.remove(), 220);
+  }
+
   // ── Pointer gestures (no HTML5 DnD — pointer events only) ──
   function onPointerDown(e) {
     if (e.target.closest('[data-ng]')) return;
@@ -390,6 +453,7 @@
     if (swipe) {
       swipe.dx = dx;
       ptr.el.style.transform = 'translateX(' + dx + 'px)';
+      updateSwipeGlyph(ptr.el, dx, 'done');
     }
   }
 
@@ -405,6 +469,7 @@
         swipe = null;
         el.classList.remove('no-tr');
         el.style.transform = '';
+        fadeSwipeGlyph(el);
       }
       ptr = null;
       return;
@@ -443,6 +508,7 @@
     if (archSwipe) {
       archSwipe.dx = dx;
       ptrA.el.style.transform = 'translateX(' + dx + 'px)';
+      updateSwipeGlyph(ptrA.el, dx, 'del');
     }
   }
   function onArchPointerUp() {
@@ -455,6 +521,7 @@
         archSwipe = null;
         el.classList.remove('no-tr');
         el.style.transform = '';
+        fadeSwipeGlyph(el);
       }
     }
     ptrA = null;
@@ -463,6 +530,7 @@
     if (archSwipe && ptrA) {
       ptrA.el.classList.remove('no-tr');
       ptrA.el.style.transform = '';
+      fadeSwipeGlyph(ptrA.el);
     }
     archSwipe = null;
     ptrA = null;
@@ -517,7 +585,7 @@
 
     const wrap = el('div', 'rw');
     const clip = el('div', 'clip');
-    const row = el('div', 'row' + (isParent ? ' parent' : ''));
+    const row = el('div', 'row' + (isParent ? ' parent' : '') + (editingId === n.id ? ' editing' : ''));
     row.dataset.id = n.id;
     // Indent the card itself so hierarchy reads at the card edge.
     row.style.marginLeft = (8 + (depthLevel - 1) * 24) + 'px';
@@ -637,6 +705,7 @@
     renderArch();
     $('tabList').classList.toggle('active', view === 'list');
     $('tabArch').classList.toggle('active', view === 'archive');
+    $('tabs').classList.toggle('archive', view === 'archive');
     $('track').classList.toggle('archive', view === 'archive');
     const pill = $('undoPill');
     pill.hidden = !undoInfo;
@@ -655,6 +724,10 @@
   archEl.addEventListener('pointerup', onArchPointerUp);
   archEl.addEventListener('pointercancel', onArchPointerCancel);
   archEl.addEventListener('contextmenu', e => e.preventDefault());
+
+  // iOS Safari only applies :active during touch when a touchstart listener
+  // exists in the chain — required for the press states to show at all.
+  document.addEventListener('touchstart', () => {}, { passive: true });
 
   // touch-action stays pan-y for normal scrolling; once a swipe or drag owns
   // the gesture, block the browser's scroll/pull-to-refresh outright.

@@ -1,7 +1,6 @@
 /* Offload — visual system ported from the Claude Design source of truth. */
 
 :root {
-  --bg: #FFFFFF;
   --page: #F2F2F7;
   --card: #FFFFFF;
   --card-sh: 0 1px 2.5px rgba(0, 0, 0, .07);
@@ -13,10 +12,10 @@
   --pill: rgba(252, 252, 252, .92);
   --bar: rgba(255, 255, 255, .85);
   --tint: #007AFF;
+  --danger: #FF3B30;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #000000;
     --page: #000000;
     --card: #1C1C1E;
     --card-sh: 0 1px 2.5px rgba(0, 0, 0, .3);
@@ -28,6 +27,7 @@
     --pill: rgba(44, 44, 46, .94);
     --bar: rgba(12, 12, 12, .82);
     --tint: #0A84FF;
+    --danger: #FF453A;
   }
 }
 
@@ -67,7 +67,21 @@ body {
   gap: 8px;
   border-bottom: 0.5px solid var(--hair);
   flex: none;
+  position: relative;
 }
+/* Slides on the same curve as the track, so chrome and content move as one. */
+.tab-ind {
+  position: absolute;
+  left: 20px;
+  bottom: 6px;
+  height: 44px;
+  width: calc(50% - 24px);
+  border-radius: 12px;
+  background: var(--fill);
+  transition: transform .42s cubic-bezier(.32, .72, .25, 1);
+  pointer-events: none;
+}
+.tabs.archive .tab-ind { transform: translateX(calc(100% + 8px)); }
 .tab {
   flex: 1;
   height: 44px;
@@ -80,8 +94,11 @@ body {
   letter-spacing: .02em;
   cursor: pointer;
   border-radius: 12px;
+  position: relative;
+  transition: color .18s ease, opacity .2s ease;
 }
 .tab.active { color: var(--tint); }
+.tab:active { opacity: .45; }
 
 /* ── Sliding track ── */
 .viewport {
@@ -106,7 +123,10 @@ body {
   box-sizing: border-box;
   padding-top: 6px;
   padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  position: relative;
+  scrollbar-width: none;
 }
+.screen::-webkit-scrollbar { display: none; }
 
 /* ── List rows ── */
 .rw {
@@ -117,11 +137,24 @@ body {
   z-index: 1;
 }
 .rw.gone { grid-template-rows: 0fr; }
-.rw.gap-before { box-shadow: 0 -2.5px 0 0 var(--tint); }
-.rw.gap-after { box-shadow: 0 2.5px 0 0 var(--tint); }
 .rw.lifted { z-index: 30; }
-.clip { overflow: hidden; min-height: 0; }
+.clip { overflow: hidden; min-height: 0; position: relative; }
 .rw.lifted .clip { overflow: visible; }
+
+/* Insertion indicator: drawn by the target row so it matches the card's own
+   edges (including depth indent), centered in the 6px inter-card gap. */
+.rw.gap-before .clip, .rw.gap-after .clip { overflow: visible; }
+.rw.gap-before .row::before, .rw.gap-after .row::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: var(--tint);
+}
+.rw.gap-before .row::before { top: -4.25px; }
+.rw.gap-after .row::after { bottom: -4.25px; }
 
 .row {
   margin: 0 8px;
@@ -141,6 +174,10 @@ body {
   touch-action: pan-y;
 }
 .row.no-tr { transition: none; }
+.row:active { background: color-mix(in srgb, var(--txt) 4%, var(--card)); }
+.row.editing {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint) 55%, transparent), var(--card-sh);
+}
 .row.drag-src {
   background: var(--card);
   box-shadow: 0 12px 30px rgba(0, 0, 0, .24), inset 0 0 0 0.5px var(--hair);
@@ -164,6 +201,21 @@ body {
   background: transparent;
 }
 
+/* Revealed in the gutter while a row is swiped; opacity tracks drag distance
+   (set inline by JS) and pops to full scale once past the commit threshold. */
+.swipe-glyph {
+  position: absolute;
+  top: calc(50% - 3px); /* clip = row + 6px hairline, so bias up half of it */
+  transform: translateY(-50%) scale(.55);
+  display: flex;
+  color: var(--tint);
+  opacity: 0;
+  transition: transform .18s cubic-bezier(.25, .8, .3, 1);
+  pointer-events: none;
+}
+.swipe-glyph.commit { transform: translateY(-50%) scale(1); }
+.swipe-glyph.del { color: var(--danger); }
+
 .chev {
   width: 26px;
   height: 26px;
@@ -177,7 +229,10 @@ body {
   cursor: pointer;
   color: var(--ter);
   position: relative;
+  border-radius: 8px;
+  transition: opacity .2s ease;
 }
+.chev:active { opacity: .45; }
 .chev::before { content: ''; position: absolute; inset: -9px; }
 .chev svg { transition: transform .2s ease; transform: rotate(90deg); }
 .chev.closed svg { transform: rotate(0deg); }
@@ -292,7 +347,10 @@ body {
   color: var(--tint);
   font-family: inherit;
   cursor: pointer;
+  border-radius: 10px;
+  transition: opacity .2s ease;
 }
+.putback:active { opacity: .45; }
 
 .ver {
   text-align: center;
@@ -301,9 +359,29 @@ body {
   padding: 28px 0 8px;
   user-select: none;
 }
+/* Empty archive: nothing above to flow under, so pin above the input bar. */
+#archEmpty:not([hidden]) + .ver {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  padding: 0;
+}
 
 /* ── Empty states ── */
-.empty { padding: 140px 40px 0; text-align: center; }
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  /* Optical center of the space above the input bar, on any viewport. */
+  padding: 0 40px calc(96px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+}
+.empty[hidden] { display: none; }
 .empty-main { font-size: 17px; color: var(--sec); }
 .empty-sub { font-size: 14px; color: var(--ter); margin-top: 8px; }
 
@@ -328,6 +406,7 @@ body {
   box-sizing: border-box;
 }
 .undo-pill[hidden] { display: none; }
+.undo-pill.hide { animation: bd-pill-out .2s ease forwards; }
 .undo-label {
   font-size: 14px;
   color: var(--sec);
@@ -344,7 +423,10 @@ body {
   font-family: inherit;
   padding: 11px 10px;
   cursor: pointer;
+  border-radius: 999px;
+  transition: opacity .2s ease;
 }
+#undoBtn:active { opacity: .45; }
 
 /* ── Input bar ── */
 .input-bar {
@@ -374,8 +456,16 @@ body {
   -webkit-appearance: none;
   user-select: text;
   -webkit-user-select: text;
+  transition: box-shadow .25s ease;
 }
+#newTask:focus { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint) 55%, transparent); }
 #newTask::placeholder { color: rgba(120, 120, 128, .55); }
+
+/* Keyboard-driven focus (desktop) — touch never triggers :focus-visible. */
+.tab:focus-visible, .chev:focus-visible, .putback:focus-visible, #undoBtn:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: -2px;
+}
 
 /* Keyboard open: #app is resized/translated by JS to exactly fill the
    visible area above the keyboard, so safe-area padding (covered by the
@@ -397,9 +487,13 @@ body {
   from { opacity: 0; transform: translate(-50%, 10px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
+@keyframes bd-pill-out {
+  to { opacity: 0; transform: translate(-50%, 8px); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .track { transition: none; }
+  .tab-ind { transition: none; }
   .input-bar { transition: none; }
   .rw { transition: none; }
   .row { transition: background-color .15s ease; }
@@ -408,5 +502,8 @@ body {
   .arow { transition: none; }
   .arow.leave { animation: none; opacity: 0; }
   .chev svg { transition: none; }
+  .swipe-glyph { transition: none; }
   .undo-pill { animation: none; }
+  .undo-pill.hide { animation: none; opacity: 0; }
+  #newTask { transition: none; }
 }
