@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Offload</title>
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Offload">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <header class="tabs">
+    <button id="tabList" class="tab active" type="button">List</button>
+    <button id="tabArch" class="tab" type="button">Archive</button>
+  </header>
+
+  <main class="viewport">
+    <div id="track" class="track">
+      <section class="screen" aria-label="List">
+        <div id="list"></div>
+        <div id="listEmpty" class="empty" hidden>
+          <div class="empty-main">Nothing on your mind.</div>
+          <div class="empty-sub">The box below is always open.</div>
+        </div>
+      </section>
+      <section class="screen" aria-label="Archive">
+        <div id="arch"></div>
+        <div id="archEmpty" class="empty" hidden>
+          <div class="empty-main">Nothing finished yet.</div>
+          <div class="empty-sub">Completed tasks rest here.</div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="undoPill" class="undo-pill" hidden>
+    <div id="undoLabel" class="undo-label"></div>
+    <button id="undoBtn" type="button">Undo</button>
+  </div>
+
+  <footer class="input-bar">
+    <input id="newTask" type="text" placeholder="New task" autocomplete="off" autocapitalize="sentences" enterkeyhint="done">
+  </footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
