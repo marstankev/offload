@@ -5,7 +5,7 @@
   'use strict';
 
   // Keep in lockstep with the CACHE name in sw.js — bump both every deploy.
-  const APP_VERSION = 'v5';
+  const APP_VERSION = 'v6';
 
   const STORAGE_KEY = 'offload.v1';
   const MAX_DEPTH = 3;
@@ -738,13 +738,15 @@
   }
 
   // ── Boot ──
-  $('ver').textContent = APP_VERSION;
+  // Guarded: if a stale-cached index.html lacks the element, boot must not die.
+  const verEl = $('ver');
+  if (verEl) verEl.textContent = APP_VERSION;
   load();
   render();
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
     });
   }
 })();

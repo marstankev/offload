@@ -1,5 +1,5 @@
 /* Offload service worker — cache-first app shell, fully offline. */
-const CACHE = 'offload-v5';
+const CACHE = 'offload-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -12,7 +12,18 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache:'reload' bypasses the HTTP cache — without it, addAll may install
+  // a stale mix of old and new files and cache-first serves that forever.
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => Promise.all(ASSETS.map(u =>
+        fetch(new Request(u, { cache: 'reload' })).then(r => {
+          if (!r.ok) throw new Error('fetch failed: ' + u);
+          return c.put(u, r);
+        })
+      )))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
