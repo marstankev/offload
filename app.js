@@ -5,7 +5,7 @@
   'use strict';
 
   // Keep in lockstep with the CACHE name in sw.js — bump both every deploy.
-  const APP_VERSION = 'v7';
+  const APP_VERSION = 'v8';
 
   const STORAGE_KEY = 'offload.v1';
   const MAX_DEPTH = 3;
@@ -519,7 +519,8 @@
     const clip = el('div', 'clip');
     const row = el('div', 'row' + (isParent ? ' parent' : ''));
     row.dataset.id = n.id;
-    row.style.paddingLeft = (12 + (depthLevel - 1) * 24) + 'px';
+    // Indent the card itself so hierarchy reads at the card edge.
+    row.style.marginLeft = (8 + (depthLevel - 1) * 24) + 'px';
 
     if (isParent) {
       const chev = el('button', 'chev' + (isCollapsed ? ' closed' : ''));
