@@ -5,7 +5,7 @@
   'use strict';
 
   // Keep in lockstep with the CACHE name in sw.js — bump both every deploy.
-  const APP_VERSION = 'v15';
+  const APP_VERSION = 'v16';
 
   const STORAGE_KEY = 'offload.v1';
   const MAX_DEPTH = 3;
@@ -17,6 +17,14 @@
   const SWIPE_ANGLE_RATIO = 1.3;
   const EDGE_GUARD_PX = 24;
   const UNDO_MS = 6000;
+
+  // Drop bands as a fraction of the target row's height: above NEST_TOP is
+  // "insert before", below NEST_BOTTOM is "insert after", between them nests.
+  // Both are biased down by BAND_BIAS — geometrically centred bands trigger
+  // nesting higher on the card than it reads under a fingertip.
+  const BAND_BIAS = 0.15;
+  const NEST_TOP = 0.28 + BAND_BIAS;
+  const NEST_BOTTOM = 0.72 + BAND_BIAS;
 
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const LEAVE_COLLAPSE_MS = () => (reducedMotion.matches ? 0 : 460);
@@ -324,10 +332,10 @@
       if (y < s.top) { target = { id: s.id, idx: s.idx, mode: 'before' }; break; }
       if (y <= s.bottom) {
         const rel = (y - s.top) / s.height;
-        if (rel > 0.28 && rel < 0.72) {
+        if (rel > NEST_TOP && rel < NEST_BOTTOM) {
           target = { id: s.id, idx: s.idx, mode: 'nest', invalid: depth(s.id) + heightOf(drag.id) > MAX_DEPTH };
         } else {
-          target = { id: s.id, idx: s.idx, mode: rel <= 0.28 ? 'before' : 'after' };
+          target = { id: s.id, idx: s.idx, mode: rel <= NEST_TOP ? 'before' : 'after' };
         }
         break;
       }
