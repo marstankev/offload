@@ -5,7 +5,7 @@
   'use strict';
 
   // Keep in lockstep with the CACHE name in sw.js — bump both every deploy.
-  const APP_VERSION = 'v17';
+  const APP_VERSION = 'v18';
 
   const STORAGE_KEY = 'offload.v1';
   const MAX_DEPTH = 3;
