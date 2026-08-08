@@ -140,7 +140,8 @@ body {
 .rw {
   display: grid;
   grid-template-rows: 1fr;
-  transition: grid-template-rows .32s cubic-bezier(.4, 0, .2, 1);
+  /* transform animates the make-room shifts during drag reordering */
+  transition: grid-template-rows .32s cubic-bezier(.4, 0, .2, 1), transform .22s cubic-bezier(.25, .8, .3, 1);
   position: relative;
   z-index: 1;
 }
@@ -148,21 +149,6 @@ body {
 .rw.lifted { z-index: 30; }
 .clip { overflow: hidden; min-height: 0; position: relative; }
 .rw.lifted .clip { overflow: visible; }
-
-/* Insertion indicator: drawn by the target row so it matches the card's own
-   edges (including depth indent), centered in the 6px inter-card gap. */
-.rw.gap-before .clip, .rw.gap-after .clip { overflow: visible; }
-.rw.gap-before .row::before, .rw.gap-after .row::after {
-  content: '';
-  position: absolute;
-  left: 2px;
-  right: 2px;
-  height: 2.5px;
-  border-radius: 2px;
-  background: var(--tint);
-}
-.rw.gap-before .row::before { top: -4.25px; }
-.rw.gap-after .row::after { bottom: -4.25px; }
 
 .row {
   margin: 0 8px;

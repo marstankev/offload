@@ -5,7 +5,7 @@
   'use strict';
 
   // Keep in lockstep with the CACHE name in sw.js — bump both every deploy.
-  const APP_VERSION = 'v13';
+  const APP_VERSION = 'v14';
 
   const STORAGE_KEY = 'offload.v1';
   const MAX_DEPTH = 3;
@@ -276,7 +276,19 @@
   function startDrag() {
     if (!ptr) return;
     try { ptr.el.setPointerCapture(ptr.pid); } catch (e) {}
-    drag = { id: ptr.id, sx: ptr.x, sy: ptr.y, target: null };
+    drag = { id: ptr.id, sx: ptr.x, sy: ptr.y, target: null, geom: [], dIdx: -1, holeH: 0 };
+    // Snapshot pre-drag geometry: rows get shifted to make room while
+    // dragging, so live rects would jitter under the pointer. The list
+    // cannot scroll mid-drag, so the snapshot stays valid.
+    const sub = descIds(drag.id);
+    rowEls.forEach(({ wrap, row }, id) => {
+      const r = row.getBoundingClientRect();
+      if (id === drag.id) {
+        drag.dIdx = drag.geom.length;
+        drag.holeH = wrap.getBoundingClientRect().height;
+      }
+      drag.geom.push({ id, top: r.top, bottom: r.bottom, height: r.height, sub: sub.has(id), leaving: leavePhase.has(id) });
+    });
     const els = rowEls.get(ptr.id);
     if (els) {
       els.wrap.classList.add('lifted');
@@ -287,7 +299,7 @@
 
   function clearTargetVisuals() {
     rowEls.forEach(({ wrap, row }) => {
-      wrap.classList.remove('gap-before', 'gap-after');
+      wrap.style.transform = '';
       row.classList.remove('nest-ok', 'nest-bad');
     });
   }
@@ -301,30 +313,44 @@
       els.row.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(1.08)';
     }
 
-    const excluded = descIds(drag.id);
-    excluded.add(drag.id);
+    const g = drag.geom;
     let target = null;
-    for (const [id, { row }] of rowEls) {
-      if (excluded.has(id) || leavePhase.has(id)) continue;
-      const r = row.getBoundingClientRect();
-      if (e.clientY >= r.top && e.clientY <= r.bottom) {
-        const rel = (e.clientY - r.top) / r.height;
+    for (let i = 0; i < g.length; i++) {
+      const s = g[i];
+      if (s.id === drag.id || s.sub || s.leaving) continue;
+      if (e.clientY >= s.top && e.clientY <= s.bottom) {
+        const rel = (e.clientY - s.top) / s.height;
         if (rel > 0.28 && rel < 0.72) {
-          target = { id, mode: 'nest', invalid: depth(id) + heightOf(drag.id) > MAX_DEPTH };
+          target = { id: s.id, idx: i, mode: 'nest', invalid: depth(s.id) + heightOf(drag.id) > MAX_DEPTH };
         } else {
-          target = { id, mode: rel <= 0.28 ? 'before' : 'after' };
+          target = { id: s.id, idx: i, mode: rel <= 0.28 ? 'before' : 'after' };
         }
         break;
       }
     }
     drag.target = target;
-    clearTargetVisuals();
-    if (target) {
-      const t = rowEls.get(target.id);
-      if (t) {
-        if (target.mode === 'nest') t.row.classList.add(target.invalid ? 'nest-bad' : 'nest-ok');
-        else t.wrap.classList.add(target.mode === 'before' ? 'gap-before' : 'gap-after');
+
+    // Nest highlight on the target card only.
+    rowEls.forEach(({ row }, id) => {
+      const isNest = target && target.mode === 'nest' && target.id === id;
+      row.classList.toggle('nest-ok', isNest && !target.invalid);
+      row.classList.toggle('nest-bad', isNest && !!target.invalid);
+    });
+
+    // Reorder preview: rows between the held card's slot and the insertion
+    // point slide by the held card's height, physically opening the gap.
+    // ins = slot index the card would occupy in the snapshot ordering.
+    let ins = -1;
+    if (target && target.mode !== 'nest') ins = target.mode === 'before' ? target.idx : target.idx + 1;
+    for (let i = 0; i < g.length; i++) {
+      const s = g[i];
+      let shift = 0;
+      if (ins >= 0 && s.id !== drag.id && !s.sub) {
+        if (ins > drag.dIdx && i > drag.dIdx && i < ins) shift = -drag.holeH;
+        else if (ins <= drag.dIdx && i >= ins && i < drag.dIdx) shift = drag.holeH;
       }
+      const w = rowEls.get(s.id);
+      if (w) w.wrap.style.transform = shift ? 'translateY(' + shift + 'px)' : '';
     }
   }
 
