@@ -5,7 +5,7 @@
   'use strict';
 
   // Keep in lockstep with the CACHE name in sw.js — bump both every deploy.
-  const APP_VERSION = 'v11';
+  const APP_VERSION = 'v12';
 
   const STORAGE_KEY = 'offload.v1';
   const MAX_DEPTH = 3;
@@ -700,6 +700,7 @@
       archEls.set(n.id, { wrap, row: arow });
       frag.appendChild(wrap);
     });
+    frag.appendChild(el('div', 'ver', APP_VERSION));
     archEl.appendChild(frag);
     $('archEmpty').hidden = done.length > 0;
   }
@@ -834,9 +835,6 @@
   }
 
   // ── Boot ──
-  // Guarded: if a stale-cached index.html lacks the element, boot must not die.
-  const verEl = $('ver');
-  if (verEl) verEl.textContent = APP_VERSION;
   load();
   render();
 

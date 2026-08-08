@@ -121,12 +121,20 @@ body {
   overflow-y: auto;
   overscroll-behavior-y: contain;
   box-sizing: border-box;
-  padding-top: 6px;
-  padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
   position: relative;
   scrollbar-width: none;
 }
 .screen::-webkit-scrollbar { display: none; }
+/* The screen paddings live on the content, which is kept 1px taller than the
+   viewport: that 1px makes the container genuinely scrollable, which is what
+   unlocks iOS rubber-banding even when the list is short. */
+#list, #arch {
+  box-sizing: border-box;
+  min-height: calc(100% + 1px);
+  padding: 6px 0 calc(104px + env(safe-area-inset-bottom, 0px));
+}
+#arch { display: flex; flex-direction: column; }
+#arch .ver { margin-top: auto; }
 
 /* ── List rows ── */
 .rw {
