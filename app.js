@@ -5,7 +5,7 @@
   'use strict';
 
   // Keep in lockstep with the CACHE name in sw.js — bump both every deploy.
-  const APP_VERSION = 'v14';
+  const APP_VERSION = 'v15';
 
   const STORAGE_KEY = 'offload.v1';
   const MAX_DEPTH = 3;
@@ -287,7 +287,7 @@
         drag.dIdx = drag.geom.length;
         drag.holeH = wrap.getBoundingClientRect().height;
       }
-      drag.geom.push({ id, top: r.top, bottom: r.bottom, height: r.height, sub: sub.has(id), leaving: leavePhase.has(id) });
+      drag.geom.push({ id, idx: drag.geom.length, top: r.top, bottom: r.bottom, height: r.height, sub: sub.has(id), leaving: leavePhase.has(id) });
     });
     const els = rowEls.get(ptr.id);
     if (els) {
@@ -313,20 +313,28 @@
       els.row.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(1.08)';
     }
 
+    // Continuous hit ranges: inside a row → band logic; in the gutter between
+    // rows (or above/below the list) → the adjacent insertion point. Any dead
+    // zone here would momentarily null the target and snap the gap shut.
     const g = drag.geom;
+    const elig = g.filter(s => s.id !== drag.id && !s.sub && !s.leaving);
+    const y = e.clientY;
     let target = null;
-    for (let i = 0; i < g.length; i++) {
-      const s = g[i];
-      if (s.id === drag.id || s.sub || s.leaving) continue;
-      if (e.clientY >= s.top && e.clientY <= s.bottom) {
-        const rel = (e.clientY - s.top) / s.height;
+    for (const s of elig) {
+      if (y < s.top) { target = { id: s.id, idx: s.idx, mode: 'before' }; break; }
+      if (y <= s.bottom) {
+        const rel = (y - s.top) / s.height;
         if (rel > 0.28 && rel < 0.72) {
-          target = { id: s.id, idx: i, mode: 'nest', invalid: depth(s.id) + heightOf(drag.id) > MAX_DEPTH };
+          target = { id: s.id, idx: s.idx, mode: 'nest', invalid: depth(s.id) + heightOf(drag.id) > MAX_DEPTH };
         } else {
-          target = { id: s.id, idx: i, mode: rel <= 0.28 ? 'before' : 'after' };
+          target = { id: s.id, idx: s.idx, mode: rel <= 0.28 ? 'before' : 'after' };
         }
         break;
       }
+    }
+    if (!target && elig.length) {
+      const last = elig[elig.length - 1];
+      target = { id: last.id, idx: last.idx, mode: 'after' };
     }
     drag.target = target;
 
