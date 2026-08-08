@@ -1,5 +1,5 @@
 /* Offload service worker — cache-first app shell, fully offline. */
-const CACHE = 'offload-v16';
+const CACHE = 'offload-v17';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,8 @@ const ASSETS = [
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/icon-dark-192.png',
+  './icons/icon-dark-512.png',
   './icons/apple-touch-icon.png'
 ];
 
