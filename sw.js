@@ -1,14 +1,14 @@
 /* Offload service worker — cache-first app shell, fully offline. */
-const CACHE = 'offload-v18';
+const CACHE = 'offload-v19';
 const ASSETS = [
   './',
   './index.html',
   './app.css',
   './app.js',
   './manifest.webmanifest',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/c-fade-dark-180.png',
+  './icons/c-fade-dark-192.png',
+  './icons/c-fade-dark-512.png'
 ];
 
 self.addEventListener('install', e => {
