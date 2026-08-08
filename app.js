@@ -5,7 +5,7 @@
   'use strict';
 
   // Keep in lockstep with the CACHE name in sw.js — bump both every deploy.
-  const APP_VERSION = 'v10';
+  const APP_VERSION = 'v11';
 
   const STORAGE_KEY = 'offload.v1';
   const MAX_DEPTH = 3;
@@ -113,11 +113,15 @@
 
   // ── Mutations ──
   function addTask(text) {
+    // New tasks append at the bottom: list reads oldest → newest.
     const roots = nodes.filter(n => isActive(n) && n.parentId === null);
-    const order = roots.length ? Math.min(...roots.map(r => r.order)) - 1 : 0;
-    nodes = [{ id: uid(), text, parentId: null, order, createdAt: Date.now(), completedAt: null, completedGroup: null }, ...nodes];
+    const order = roots.length ? Math.max(...roots.map(r => r.order)) + 1 : 0;
+    nodes = [...nodes, { id: uid(), text, parentId: null, order, createdAt: Date.now(), completedAt: null, completedGroup: null }];
     persist();
     render();
+    // Keep the fresh card in view, right above the input.
+    const screen = listEl.closest('.screen');
+    if (screen) screen.scrollTop = screen.scrollHeight;
   }
 
   function complete(id) {
