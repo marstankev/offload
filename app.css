@@ -190,6 +190,9 @@ body {
   background: var(--card);
   box-shadow: 0 12px 30px rgba(0, 0, 0, .24), inset 0 0 0 0.5px var(--hair);
   opacity: .95;
+  /* Pickup pop: animates via the row's transform transition, then inline
+     translate+scale takes over once the finger moves. */
+  transform: scale(1.08);
 }
 .row.nest-ok {
   background: color-mix(in srgb, var(--tint) 13%, var(--card));

@@ -1,5 +1,5 @@
 /* Offload service worker — cache-first app shell, fully offline. */
-const CACHE = 'offload-v12';
+const CACHE = 'offload-v13';
 const ASSETS = [
   './',
   './index.html',

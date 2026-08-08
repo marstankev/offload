@@ -5,7 +5,7 @@
   'use strict';
 
   // Keep in lockstep with the CACHE name in sw.js — bump both every deploy.
-  const APP_VERSION = 'v12';
+  const APP_VERSION = 'v13';
 
   const STORAGE_KEY = 'offload.v1';
   const MAX_DEPTH = 3;
@@ -280,7 +280,8 @@
     const els = rowEls.get(ptr.id);
     if (els) {
       els.wrap.classList.add('lifted');
-      els.row.classList.add('drag-src', 'no-tr');
+      // no-tr comes later (first move): the pickup scale should animate.
+      els.row.classList.add('drag-src');
     }
   }
 
@@ -295,7 +296,10 @@
     if (!drag) return;
     const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
     const els = rowEls.get(drag.id);
-    if (els) els.row.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(1.045)';
+    if (els) {
+      els.row.classList.add('no-tr'); // direct tracking from here on
+      els.row.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(1.08)';
+    }
 
     const excluded = descIds(drag.id);
     excluded.add(drag.id);
